@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+musicplayer.db
+*.db
+Debug/
+Release/
