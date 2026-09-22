@@ -56,20 +56,21 @@ public partial class Form1 : Form
 
     private void InitializeDefaultArtwork()
     {
-        var bmp = new Bitmap(150, 150);
+        int size = Math.Max(150, pbArtwork.Width > 0 ? pbArtwork.Width : 350);
+        var bmp = new Bitmap(size, size);
         using (var g = Graphics.FromImage(bmp))
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(Color.FromArgb(30, 30, 30));
+            g.Clear(Color.FromArgb(24, 24, 24)); // Darker background
 
             using var brush = new SolidBrush(Color.FromArgb(80, 80, 80));
-            using var font = new Font("Segoe UI", 48, FontStyle.Bold);
+            using var font = new Font("Segoe MDL2 Assets", size / 3f, FontStyle.Regular);
             var stringFormat = new StringFormat
             {
                 Alignment = StringAlignment.Center,
                 LineAlignment = StringAlignment.Center
             };
-            g.DrawString("🎵", font, brush, new RectangleF(0, 0, 150, 150), stringFormat);
+            g.DrawString("\uE8D6", font, brush, new RectangleF(0, 0, size, size), stringFormat);
         }
         _defaultArtwork = bmp;
         pbArtwork.Image = _defaultArtwork;
@@ -159,12 +160,14 @@ public partial class Form1 : Form
 
     private void LoadSongs()
     {
+        System.Diagnostics.Debug.WriteLine("[LOAD SONGS] LoadSongs called");
         _allSongs = _databaseService.GetSongs();
         ApplySearchFilter();
     }
 
     private void ApplySearchFilter()
     {
+        System.Diagnostics.Debug.WriteLine($"[FILTER] ApplySearchFilter called. Current SelectedIndex={lstSongs.SelectedIndex}");
         var searchText = txtSearch.Text?.Trim().ToLowerInvariant() ?? string.Empty;
         var showFavoritesOnly = cmbFilter.SelectedIndex == 1;
 
@@ -216,11 +219,64 @@ public partial class Form1 : Form
 
     private bool LoadSelectedSong(Song selectedSong, bool silentFail = false)
     {
+        System.Diagnostics.Debug.WriteLine($"[LOAD START] title={selectedSong.Title}, silentFail={silentFail}, currentId={_currentLoadedSongId}");
         if (_currentLoadedSongId == selectedSong.Id && _audioPlayerService.IsLoaded)
         {
+            System.Diagnostics.Debug.WriteLine($"[LOAD RETURN] title={selectedSong.Title}, result=TRUE");
             return true;
         }
 
+        if (silentFail)
+        {
+            // Navigation path: pre-check file existence before touching the audio device.
+            // AudioPlayerService.Load() disposes the current WaveOut before opening the new file,
+            // so we must not call it on missing/unreadable files or the current playback is destroyed.
+            if (!System.IO.File.Exists(selectedSong.FilePath))
+                return false;
+
+            try
+            {
+                _audioPlayerService.Load(selectedSong.FilePath);
+            }
+            catch
+            {
+                System.Diagnostics.Debug.WriteLine($"[LOAD RETURN] title={selectedSong.Title}, result=FALSE");
+                return false;
+            }
+
+            // Audio loaded successfully — now lazily extract metadata if missing.
+            _currentLoadedSongId = selectedSong.Id;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(selectedSong.Duration) || selectedSong.Duration == "00:00")
+                {
+                    var realMetadata = _audioMetadataService.ExtractMetadata(selectedSong.FilePath);
+                    selectedSong.Title = realMetadata.Title;
+                    selectedSong.Artist = realMetadata.Artist;
+                    selectedSong.Album = realMetadata.Album;
+                    selectedSong.Duration = realMetadata.Duration;
+                    _databaseService.UpdateSongMetadata(selectedSong);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Metadata extraction failed for {selectedSong.FilePath}: {ex.Message}");
+            }
+
+            lblSongTitle.Text = string.IsNullOrWhiteSpace(selectedSong.Title) ? "Unknown Title" : selectedSong.Title;
+            var navArtistStr = string.IsNullOrWhiteSpace(selectedSong.Artist) ? "Unknown Artist" : selectedSong.Artist;
+            var navAlbumStr = string.IsNullOrWhiteSpace(selectedSong.Album) ? "Unknown Album" : selectedSong.Album;
+            lblArtist.Text = $"{navArtistStr} • {navAlbumStr}";
+            lblTotalTime.Text = _audioPlayerService.TotalDuration.ToString(@"mm\:ss");
+            lblCurrentTime.Text = "00:00";
+            tbProgress.Value = 0;
+            btnPlayPause.Text = "▶";
+            UpdateArtwork(selectedSong.FilePath);
+            System.Diagnostics.Debug.WriteLine($"[LOAD RETURN] title={selectedSong.Title}, result=TRUE");
+            return true;
+        }
+
+        // Manual selection path: full behavior with metadata extraction before loading.
         try
         {
             if (string.IsNullOrWhiteSpace(selectedSong.Duration) || selectedSong.Duration == "00:00")
@@ -248,15 +304,14 @@ public partial class Form1 : Form
             btnPlayPause.Text = "▶";
 
             UpdateArtwork(selectedSong.FilePath);
+            System.Diagnostics.Debug.WriteLine($"[LOAD RETURN] title={selectedSong.Title}, result=TRUE");
             return true;
         }
         catch (Exception ex)
         {
             _currentLoadedSongId = null;
-            if (!silentFail)
-            {
-                MessageBox.Show($"Error loading audio file:\n{ex.Message}", "Playback Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            MessageBox.Show($"Error loading audio file:\n{ex.Message}", "Playback Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            System.Diagnostics.Debug.WriteLine($"[LOAD RETURN] title={selectedSong.Title}, result=FALSE");
             return false;
         }
     }
@@ -265,6 +320,7 @@ public partial class Form1 : Form
 
     private void LstSongs_SelectedIndexChanged(object? sender, EventArgs e)
     {
+        System.Diagnostics.Debug.WriteLine($"[SELECTION CHANGED] index={lstSongs.SelectedIndex}, title={(lstSongs.SelectedItem as Song)?.Title}, programmatic={_isProgrammaticSelection}");
         if (lstSongs.SelectedItem is Song selectedSong)
         {
             UpdateFavoriteButtonText(selectedSong);
@@ -280,18 +336,9 @@ public partial class Form1 : Form
         if (index < 0 || index >= lstSongs.Items.Count) return;
         if (lstSongs.Items[index] is not Song song) return;
 
-        try
-        {
-            _isProgrammaticSelection = true;
-            lstSongs.SelectedIndex = index;
-        }
-        finally
-        {
-            _isProgrammaticSelection = false;
-        }
-
         if (LoadSelectedSong(song, silentFail: false))
         {
+            try { _isProgrammaticSelection = true; lstSongs.SelectedIndex = index; } finally { _isProgrammaticSelection = false; }
             _audioPlayerService.Stop();
             lblCurrentTime.Text = "00:00";
             tbProgress.Value = 0;
@@ -318,17 +365,11 @@ public partial class Form1 : Form
 
         for (int i = currentIndex - 1; i >= 0; i--)
         {
-            try
+            if (lstSongs.Items[i] is not Song song) continue;
+            if (!System.IO.File.Exists(song.FilePath)) continue;
+            if (LoadSelectedSong(song, silentFail: true))
             {
-                _isProgrammaticSelection = true;
-                lstSongs.SelectedIndex = i;
-            }
-            finally
-            {
-                _isProgrammaticSelection = false;
-            }
-            if (lstSongs.Items[i] is Song song && LoadSelectedSong(song, silentFail: true))
-            {
+                try { _isProgrammaticSelection = true; lstSongs.SelectedIndex = i; } finally { _isProgrammaticSelection = false; }
                 _audioPlayerService.Play();
                 btnPlayPause.Text = "⏸";
                 return;
@@ -340,11 +381,13 @@ public partial class Form1 : Form
 
     private void BtnNext_Click(object? sender, EventArgs e)
     {
+        System.Diagnostics.Debug.WriteLine($"[NEXT CLICK] SelectedIndex={lstSongs.SelectedIndex}, SelectedItem={(lstSongs.SelectedItem as Song)?.Title}");
         PlayNextTrack();
     }
 
     private void PlayNextTrack()
     {
+        System.Diagnostics.Debug.WriteLine($"[NEXT START] SelectedIndex={lstSongs.SelectedIndex}");
         if (lstSongs.Items.Count == 0 || lstSongs.SelectedItem == null) return;
 
         int currentIndex = lstSongs.SelectedIndex;
@@ -358,17 +401,17 @@ public partial class Form1 : Form
 
             foreach (var idx in candidates)
             {
-                try
+                if (lstSongs.Items[idx] is not Song song) continue;
+                if (!System.IO.File.Exists(song.FilePath)) continue;
+                
+                System.Diagnostics.Debug.WriteLine($"[NEXT TRY] index={idx}, title={song.Title}, path={song.FilePath}");
+                bool success = LoadSelectedSong(song, silentFail: true);
+                System.Diagnostics.Debug.WriteLine($"[NEXT RESULT] index={idx}, success={success}, SelectedIndex NOW={lstSongs.SelectedIndex}");
+                
+                if (success)
                 {
-                    _isProgrammaticSelection = true;
-                    lstSongs.SelectedIndex = idx;
-                }
-                finally
-                {
-                    _isProgrammaticSelection = false;
-                }
-                if (lstSongs.Items[idx] is Song song && LoadSelectedSong(song, silentFail: true))
-                {
+                    System.Diagnostics.Debug.WriteLine($"[NEXT SET INDEX] changing SelectedIndex from {lstSongs.SelectedIndex} to {idx}");
+                    try { _isProgrammaticSelection = true; lstSongs.SelectedIndex = idx; } finally { _isProgrammaticSelection = false; }
                     _audioPlayerService.Play();
                     btnPlayPause.Text = "⏸";
                     return;
@@ -382,17 +425,17 @@ public partial class Form1 : Form
                 currentIndex++;
                 if (currentIndex >= lstSongs.Items.Count) currentIndex = 0;
 
-                try
+                if (lstSongs.Items[currentIndex] is not Song song) continue;
+                if (!System.IO.File.Exists(song.FilePath)) continue;
+                
+                System.Diagnostics.Debug.WriteLine($"[NEXT TRY] index={currentIndex}, title={song.Title}, path={song.FilePath}");
+                bool success = LoadSelectedSong(song, silentFail: true);
+                System.Diagnostics.Debug.WriteLine($"[NEXT RESULT] index={currentIndex}, success={success}, SelectedIndex NOW={lstSongs.SelectedIndex}");
+                
+                if (success)
                 {
-                    _isProgrammaticSelection = true;
-                    lstSongs.SelectedIndex = currentIndex;
-                }
-                finally
-                {
-                    _isProgrammaticSelection = false;
-                }
-                if (lstSongs.Items[currentIndex] is Song song && LoadSelectedSong(song, silentFail: true))
-                {
+                    System.Diagnostics.Debug.WriteLine($"[NEXT SET INDEX] changing SelectedIndex from {lstSongs.SelectedIndex} to {currentIndex}");
+                    try { _isProgrammaticSelection = true; lstSongs.SelectedIndex = currentIndex; } finally { _isProgrammaticSelection = false; }
                     _audioPlayerService.Play();
                     btnPlayPause.Text = "⏸";
                     return;
@@ -443,6 +486,7 @@ public partial class Form1 : Form
 
     private void AudioPlayerService_PlaybackFinished(object? sender, EventArgs e)
     {
+        System.Diagnostics.Debug.WriteLine("[PLAYBACK FINISHED]");
         if (this.InvokeRequired)
         {
             this.Invoke(new Action(() => AudioPlayerService_PlaybackFinished(sender, e)));

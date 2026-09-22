@@ -47,9 +47,47 @@ public class AudioPlayerService : IDisposable
 
     private void OnPlaybackStopped(object? sender, StoppedEventArgs e)
     {
-        if (!_isManualStop)
+        bool isCurrentWaveOut = ReferenceEquals(sender, _waveOut);
+        bool isError = e.Exception != null;
+        long position = 0;
+        long length = 0;
+        bool isEof = false;
+
+        System.Diagnostics.Debug.WriteLine($"[AUDIO] PlaybackStopped fired. isCurrent={isCurrentWaveOut}, manual={_isManualStop}, error={isError}");
+
+        if (!isCurrentWaveOut)
         {
+            System.Diagnostics.Debug.WriteLine("[AUDIO] Ignoring PlaybackStopped from an old/disposed WaveOut instance.");
+            return;
+        }
+
+        if (_audioFileReader != null)
+        {
+            try
+            {
+                position = _audioFileReader.Position;
+                length = _audioFileReader.Length;
+                
+                if (length > 0)
+                {
+                    // Allow 1 second tolerance for EOF due to potential MP3 frame rounding
+                    long tolerance = _audioFileReader.WaveFormat.AverageBytesPerSecond;
+                    isEof = position >= (length - tolerance);
+                }
+            }
+            catch { }
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[AUDIO] Playback details: pos={position}, len={length}, isEof={isEof}");
+
+        if (!_isManualStop && !isError && isEof)
+        {
+            System.Diagnostics.Debug.WriteLine("[AUDIO] Raising PlaybackFinished (Genuine EOF reached).");
             PlaybackFinished?.Invoke(this, EventArgs.Empty);
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine("[AUDIO] PlaybackFinished NOT raised (Premature stop or manual).");
         }
     }
 
