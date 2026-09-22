@@ -206,39 +206,109 @@ public partial class Form1 : Form
         ApplySearchFilter();
     }
 
+    private bool LoadSelectedSong(Song selectedSong)
+    {
+        if (_currentLoadedSongId == selectedSong.Id && _audioPlayerService.IsLoaded)
+        {
+            return true;
+        }
+
+        try
+        {
+            _audioPlayerService.Load(selectedSong.FilePath);
+            _currentLoadedSongId = selectedSong.Id;
+
+            lblSongTitle.Text = string.IsNullOrWhiteSpace(selectedSong.Title) ? "Unknown Title" : selectedSong.Title;
+            
+            var artistStr = string.IsNullOrWhiteSpace(selectedSong.Artist) ? "Unknown Artist" : selectedSong.Artist;
+            var albumStr = string.IsNullOrWhiteSpace(selectedSong.Album) ? "Unknown Album" : selectedSong.Album;
+            lblArtist.Text = $"{artistStr} • {albumStr}";
+            
+            lblTotalTime.Text = _audioPlayerService.TotalDuration.ToString(@"mm\:ss");
+            lblCurrentTime.Text = "00:00";
+            tbProgress.Value = 0;
+            btnPlayPause.Text = "▶";
+
+            UpdateArtwork(selectedSong.FilePath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _currentLoadedSongId = null;
+            MessageBox.Show($"Error loading audio file:\n{ex.Message}", "Playback Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+    }
+
     private void LstSongs_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (lstSongs.SelectedItem is Song selectedSong)
         {
             UpdateFavoriteButtonText(selectedSong);
+            LoadSelectedSong(selectedSong);
+        }
+    }
 
-            if (_currentLoadedSongId == selectedSong.Id)
-            {
-                // Already loaded; no need to restart audio
-                return;
-            }
+    private void LoadAndPlaySong(int index)
+    {
+        if (index < 0 || index >= lstSongs.Items.Count) return;
+        if (lstSongs.Items[index] is not Song song) return;
 
-            try
-            {
-                _currentLoadedSongId = selectedSong.Id;
-                _audioPlayerService.Load(selectedSong.FilePath);
-                lblSongTitle.Text = string.IsNullOrWhiteSpace(selectedSong.Title) ? "Unknown Title" : selectedSong.Title;
-                
-                var artistStr = string.IsNullOrWhiteSpace(selectedSong.Artist) ? "Unknown Artist" : selectedSong.Artist;
-                var albumStr = string.IsNullOrWhiteSpace(selectedSong.Album) ? "Unknown Album" : selectedSong.Album;
-                lblArtist.Text = $"{artistStr} • {albumStr}";
-                
-                lblTotalTime.Text = _audioPlayerService.TotalDuration.ToString(@"mm\:ss");
-                lblCurrentTime.Text = "00:00";
-                tbProgress.Value = 0;
-                btnPlayPause.Text = "▶";
+        // Setting SelectedIndex updates the UI list visually.
+        // It may fire SelectedIndexChanged synchronously, but we don't rely on that side-effect.
+        lstSongs.SelectedIndex = index;
+        
+        // Explicitly load the song to guarantee it is ready before playing.
+        // If it's already loaded, this safely returns true without re-loading.
+        if (LoadSelectedSong(song))
+        {
+            _audioPlayerService.Stop();
+            lblCurrentTime.Text = "00:00";
+            tbProgress.Value = 0;
+            _audioPlayerService.Play();
+            btnPlayPause.Text = "⏸";
+        }
+    }
 
-                UpdateArtwork(selectedSong.FilePath);
-            }
-            catch (Exception ex)
+    private void BtnPrevious_Click(object? sender, EventArgs e)
+    {
+        if (lstSongs.Items.Count == 0 || lstSongs.SelectedItem == null) return;
+
+        int currentIndex = lstSongs.SelectedIndex;
+        if (currentIndex > 0)
+        {
+            LoadAndPlaySong(currentIndex - 1);
+        }
+        else
+        {
+            LoadAndPlaySong(currentIndex); // Restarts current song
+        }
+    }
+
+    private void BtnNext_Click(object? sender, EventArgs e)
+    {
+        if (lstSongs.Items.Count == 0 || lstSongs.SelectedItem == null) return;
+
+        int currentIndex = lstSongs.SelectedIndex;
+        
+        if (_isShuffleOn && lstSongs.Items.Count > 1)
+        {
+            int nextIndex;
+            do
             {
-                MessageBox.Show($"Error loading audio file:\n{ex.Message}", "Playback Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                nextIndex = _random.Next(lstSongs.Items.Count);
+            } while (nextIndex == currentIndex);
+            
+            LoadAndPlaySong(nextIndex);
+        }
+        else
+        {
+            int nextIndex = currentIndex + 1;
+            if (nextIndex >= lstSongs.Items.Count)
+            {
+                nextIndex = 0;
             }
+            LoadAndPlaySong(nextIndex);
         }
     }
 

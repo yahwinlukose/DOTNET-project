@@ -45,6 +45,8 @@ partial class Form1
         this.btnRepeat = new System.Windows.Forms.Button();
         this.btnShuffle = new System.Windows.Forms.Button();
         this.btnPlayPause = new System.Windows.Forms.Button();
+        this.btnPrevious = new System.Windows.Forms.Button();
+        this.btnNext = new System.Windows.Forms.Button();
         this.btnStop = new System.Windows.Forms.Button();
         this.btnFastForward = new System.Windows.Forms.Button();
         this.tbVolume = new System.Windows.Forms.TrackBar();
@@ -271,6 +273,22 @@ partial class Form1
         this.btnShuffle.UseVisualStyleBackColor = false;
         this.btnShuffle.Click += new System.EventHandler(this.BtnShuffle_Click);
         // 
+        // btnPrevious
+        // 
+        this.btnPrevious.Anchor = System.Windows.Forms.AnchorStyles.Bottom;
+        this.btnPrevious.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
+        this.btnPrevious.FlatAppearance.BorderSize = 0;
+        this.btnPrevious.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+        this.btnPrevious.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
+        this.btnPrevious.ForeColor = System.Drawing.Color.White;
+        this.btnPrevious.Location = new System.Drawing.Point(500, 430);
+        this.btnPrevious.Name = "btnPrevious";
+        this.btnPrevious.Size = new System.Drawing.Size(32, 45);
+        this.btnPrevious.TabIndex = 16;
+        this.btnPrevious.Text = "◀◀";
+        this.btnPrevious.UseVisualStyleBackColor = false;
+        this.btnPrevious.Click += new System.EventHandler(this.BtnPrevious_Click);
+        // 
         // btnPlayPause
         // 
         this.btnPlayPause.Anchor = System.Windows.Forms.AnchorStyles.Bottom;
@@ -279,13 +297,29 @@ partial class Form1
         this.btnPlayPause.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
         this.btnPlayPause.Font = new System.Drawing.Font("Segoe UI", 14F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
         this.btnPlayPause.ForeColor = System.Drawing.Color.White;
-        this.btnPlayPause.Location = new System.Drawing.Point(500, 430);
+        this.btnPlayPause.Location = new System.Drawing.Point(534, 430);
         this.btnPlayPause.Name = "btnPlayPause";
-        this.btnPlayPause.Size = new System.Drawing.Size(60, 45);
+        this.btnPlayPause.Size = new System.Drawing.Size(40, 45);
         this.btnPlayPause.TabIndex = 10;
         this.btnPlayPause.Text = "▶";
         this.btnPlayPause.UseVisualStyleBackColor = false;
         this.btnPlayPause.Click += new System.EventHandler(this.BtnPlayPause_Click);
+        // 
+        // btnNext
+        // 
+        this.btnNext.Anchor = System.Windows.Forms.AnchorStyles.Bottom;
+        this.btnNext.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
+        this.btnNext.FlatAppearance.BorderSize = 0;
+        this.btnNext.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+        this.btnNext.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
+        this.btnNext.ForeColor = System.Drawing.Color.White;
+        this.btnNext.Location = new System.Drawing.Point(576, 430);
+        this.btnNext.Name = "btnNext";
+        this.btnNext.Size = new System.Drawing.Size(32, 45);
+        this.btnNext.TabIndex = 17;
+        this.btnNext.Text = "▶▶";
+        this.btnNext.UseVisualStyleBackColor = false;
+        this.btnNext.Click += new System.EventHandler(this.BtnNext_Click);
         // 
         // btnStop
         // 
@@ -295,9 +329,9 @@ partial class Form1
         this.btnStop.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
         this.btnStop.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
         this.btnStop.ForeColor = System.Drawing.Color.White;
-        this.btnStop.Location = new System.Drawing.Point(565, 430);
+        this.btnStop.Location = new System.Drawing.Point(610, 430);
         this.btnStop.Name = "btnStop";
-        this.btnStop.Size = new System.Drawing.Size(50, 45);
+        this.btnStop.Size = new System.Drawing.Size(32, 45);
         this.btnStop.TabIndex = 11;
         this.btnStop.Text = "⏹";
         this.btnStop.UseVisualStyleBackColor = false;
@@ -311,9 +345,9 @@ partial class Form1
         this.btnFastForward.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
         this.btnFastForward.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
         this.btnFastForward.ForeColor = System.Drawing.Color.White;
-        this.btnFastForward.Location = new System.Drawing.Point(620, 430);
+        this.btnFastForward.Location = new System.Drawing.Point(644, 430);
         this.btnFastForward.Name = "btnFastForward";
-        this.btnFastForward.Size = new System.Drawing.Size(50, 45);
+        this.btnFastForward.Size = new System.Drawing.Size(32, 45);
         this.btnFastForward.TabIndex = 12;
         this.btnFastForward.Text = "⏩";
         this.btnFastForward.UseVisualStyleBackColor = false;
@@ -368,7 +402,9 @@ partial class Form1
         this.Controls.Add(this.btnShuffle);
         this.Controls.Add(this.btnFastForward);
         this.Controls.Add(this.btnStop);
+        this.Controls.Add(this.btnNext);
         this.Controls.Add(this.btnPlayPause);
+        this.Controls.Add(this.btnPrevious);
         this.Controls.Add(this.lblTotalTime);
         this.Controls.Add(this.lblCurrentTime);
         this.Controls.Add(this.tbProgress);
@@ -412,7 +448,9 @@ partial class Form1
     private System.Windows.Forms.Label lblTotalTime;
     private System.Windows.Forms.Button btnRepeat;
     private System.Windows.Forms.Button btnShuffle;
+    private System.Windows.Forms.Button btnPrevious;
     private System.Windows.Forms.Button btnPlayPause;
+    private System.Windows.Forms.Button btnNext;
     private System.Windows.Forms.Button btnStop;
     private System.Windows.Forms.Button btnFastForward;
     private System.Windows.Forms.TrackBar tbVolume;
