@@ -62,4 +62,25 @@ public class AudioMetadataService
 
         return song;
     }
+
+    public System.Drawing.Image? GetArtwork(string filePath)
+    {
+        try
+        {
+            using var file = TagLib.File.Create(filePath);
+            if (file.Tag.Pictures.Length > 0)
+            {
+                var picture = file.Tag.Pictures[0];
+                using var ms = new MemoryStream(picture.Data.Data);
+                using var tempImage = System.Drawing.Image.FromStream(ms);
+                return new System.Drawing.Bitmap(tempImage);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to load artwork for {filePath}: {ex.Message}");
+        }
+
+        return null;
+    }
 }

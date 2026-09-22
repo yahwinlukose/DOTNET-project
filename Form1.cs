@@ -1,3 +1,6 @@
+using System.Drawing;
+using System.Drawing.Drawing2D;
+
 namespace MusicPlayer;
 
 public partial class Form1 : Form
@@ -13,6 +16,7 @@ public partial class Form1 : Form
     private RepeatMode _repeatMode = RepeatMode.Off;
     private bool _isShuffleOn = false;
     private Random _random = new Random();
+    private System.Drawing.Image _defaultArtwork;
 
     public Form1()
     {
@@ -38,7 +42,52 @@ public partial class Form1 : Form
         cmbFilter.Items.Add("Favorites");
         cmbFilter.SelectedIndex = 0;
 
+        InitializeDefaultArtwork();
         LoadSongs();
+    }
+
+    private void InitializeDefaultArtwork()
+    {
+        var bmp = new Bitmap(150, 150);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Color.FromArgb(30, 30, 30));
+            
+            using var brush = new SolidBrush(Color.FromArgb(80, 80, 80));
+            using var font = new Font("Segoe UI", 48, FontStyle.Bold);
+            var stringFormat = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center
+            };
+            g.DrawString("🎵", font, brush, new RectangleF(0, 0, 150, 150), stringFormat);
+        }
+        _defaultArtwork = bmp;
+        pbArtwork.Image = _defaultArtwork;
+    }
+
+    private void ClearArtwork()
+    {
+        var oldImage = pbArtwork.Image;
+        pbArtwork.Image = _defaultArtwork;
+        if (oldImage != null && oldImage != _defaultArtwork)
+        {
+            oldImage.Dispose();
+        }
+    }
+
+    private void UpdateArtwork(string filePath)
+    {
+        var newImage = _audioMetadataService.GetArtwork(filePath);
+        var oldImage = pbArtwork.Image;
+        
+        pbArtwork.Image = newImage ?? _defaultArtwork;
+        
+        if (oldImage != null && oldImage != _defaultArtwork)
+        {
+            oldImage.Dispose();
+        }
     }
 
     private void TbVolume_ValueChanged(object? sender, EventArgs e)
@@ -93,6 +142,11 @@ public partial class Form1 : Form
         _playbackTimer.Stop();
         _playbackTimer.Dispose();
         _audioPlayerService.Dispose();
+
+        var img = pbArtwork.Image;
+        pbArtwork.Image = null;
+        if (img != null && img != _defaultArtwork) img.Dispose();
+        _defaultArtwork?.Dispose();
     }
 
     private void LoadSongs()
@@ -178,6 +232,8 @@ public partial class Form1 : Form
                 lblCurrentTime.Text = "00:00";
                 tbProgress.Value = 0;
                 btnPlayPause.Text = "▶";
+
+                UpdateArtwork(selectedSong.FilePath);
             }
             catch (Exception ex)
             {
@@ -378,6 +434,7 @@ public partial class Form1 : Form
                     lblSongTitle.Text = "Unknown Title";
                     lblArtist.Text = "Unknown Artist • Unknown Album";
                     lblTotalTime.Text = "00:00";
+                    ClearArtwork();
                 }
             }
             catch (Exception ex)

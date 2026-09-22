@@ -49,8 +49,10 @@ partial class Form1
         this.btnFastForward = new System.Windows.Forms.Button();
         this.tbVolume = new System.Windows.Forms.TrackBar();
         this.lblVolume = new System.Windows.Forms.Label();
+        this.pbArtwork = new System.Windows.Forms.PictureBox();
         ((System.ComponentModel.ISupportInitialize)(this.tbProgress)).BeginInit();
         ((System.ComponentModel.ISupportInitialize)(this.tbVolume)).BeginInit();
+        ((System.ComponentModel.ISupportInitialize)(this.pbArtwork)).BeginInit();
         this.SuspendLayout();
         // 
         // lstSongs
@@ -341,6 +343,16 @@ partial class Form1
         this.lblVolume.TabIndex = 14;
         this.lblVolume.Text = "Volume: 100%";
         // 
+        // pbArtwork
+        // 
+        this.pbArtwork.Anchor = System.Windows.Forms.AnchorStyles.Top;
+        this.pbArtwork.Location = new System.Drawing.Point(465, 200);
+        this.pbArtwork.Name = "pbArtwork";
+        this.pbArtwork.Size = new System.Drawing.Size(150, 150);
+        this.pbArtwork.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+        this.pbArtwork.TabIndex = 15;
+        this.pbArtwork.TabStop = false;
+        // 
         // Form1
         // 
         this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
@@ -351,6 +363,7 @@ partial class Form1
         this.ForeColor = System.Drawing.Color.White;
         this.Controls.Add(this.lblVolume);
         this.Controls.Add(this.tbVolume);
+        this.Controls.Add(this.pbArtwork);
         this.Controls.Add(this.btnRepeat);
         this.Controls.Add(this.btnShuffle);
         this.Controls.Add(this.btnFastForward);
@@ -375,6 +388,7 @@ partial class Form1
         this.Text = "🎵 Music Player";
         ((System.ComponentModel.ISupportInitialize)(this.tbProgress)).EndInit();
         ((System.ComponentModel.ISupportInitialize)(this.tbVolume)).EndInit();
+        ((System.ComponentModel.ISupportInitialize)(this.pbArtwork)).EndInit();
         this.ResumeLayout(false);
         this.PerformLayout();
 
@@ -403,4 +417,5 @@ partial class Form1
     private System.Windows.Forms.Button btnFastForward;
     private System.Windows.Forms.TrackBar tbVolume;
     private System.Windows.Forms.Label lblVolume;
+    private System.Windows.Forms.PictureBox pbArtwork;
 }
