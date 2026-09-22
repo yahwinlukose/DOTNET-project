@@ -300,13 +300,10 @@ public partial class Form1 : Form
             _ => RepeatMode.Off
         };
 
-        btnRepeat.Text = _repeatMode switch
-        {
-            RepeatMode.Off => "🔁 Repeat OFF",
-            RepeatMode.All => "🔁 Repeat ALL",
-            RepeatMode.One => "🔂 Repeat ONE",
-            _ => "🔁 Repeat OFF"
-        };
+        btnRepeat.Text = _repeatMode == RepeatMode.One ? "🔂" : "🔁";
+        btnRepeat.BackColor = _repeatMode == RepeatMode.Off 
+            ? System.Drawing.Color.FromArgb(45, 45, 45) 
+            : System.Drawing.Color.SteelBlue;
     }
 
     private void BtnShuffle_Click(object? sender, EventArgs e)

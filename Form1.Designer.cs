@@ -249,7 +249,7 @@ partial class Form1
         this.btnRepeat.Name = "btnRepeat";
         this.btnRepeat.Size = new System.Drawing.Size(100, 45);
         this.btnRepeat.TabIndex = 8;
-        this.btnRepeat.Text = "🔁 Repeat OFF";
+        this.btnRepeat.Text = "🔁";
         this.btnRepeat.UseVisualStyleBackColor = false;
         this.btnRepeat.Click += new System.EventHandler(this.BtnRepeat_Click);
         // 
