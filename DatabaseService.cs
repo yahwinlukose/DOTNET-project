@@ -57,6 +57,28 @@ public class DatabaseService
             alterCmd.CommandText = "ALTER TABLE Songs ADD COLUMN IsFavorite INTEGER NOT NULL DEFAULT 0";
             alterCmd.ExecuteNonQuery();
         }
+
+        // Migration for IsAutoDiscovered
+        var checkCmdAuto = connection.CreateCommand();
+        checkCmdAuto.CommandText = "PRAGMA table_info(Songs)";
+        using var readerAuto = checkCmdAuto.ExecuteReader();
+        bool hasIsAutoDiscovered = false;
+        while (readerAuto.Read())
+        {
+            if (readerAuto.GetString(1) == "IsAutoDiscovered")
+            {
+                hasIsAutoDiscovered = true;
+                break;
+            }
+        }
+        readerAuto.Close();
+
+        if (!hasIsAutoDiscovered)
+        {
+            var alterCmdAuto = connection.CreateCommand();
+            alterCmdAuto.CommandText = "ALTER TABLE Songs ADD COLUMN IsAutoDiscovered INTEGER NOT NULL DEFAULT 0";
+            alterCmdAuto.ExecuteNonQuery();
+        }
     }
 
     public System.Collections.Generic.List<Song> GetSongs()
@@ -66,8 +88,8 @@ public class DatabaseService
         connection.Open();
 
         var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id, Title, Artist, Album, FilePath, Duration, DateAdded, IsFavorite FROM Songs";
-        
+        command.CommandText = "SELECT Id, Title, Artist, Album, FilePath, Duration, DateAdded, IsFavorite, IsAutoDiscovered FROM Songs";
+
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
@@ -80,7 +102,8 @@ public class DatabaseService
                 FilePath = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
                 Duration = reader.IsDBNull(5) ? string.Empty : reader.GetString(5),
                 DateAdded = reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
-                IsFavorite = !reader.IsDBNull(7) && reader.GetInt32(7) == 1
+                IsFavorite = !reader.IsDBNull(7) && reader.GetInt32(7) == 1,
+                IsAutoDiscovered = !reader.IsDBNull(8) && reader.GetInt32(8) == 1
             });
         }
         return songs;
@@ -106,8 +129,8 @@ public class DatabaseService
 
         var command = connection.CreateCommand();
         command.CommandText = @"
-            INSERT INTO Songs (Title, Artist, Album, FilePath, Duration, DateAdded)
-            VALUES (@Title, @Artist, @Album, @FilePath, @Duration, @DateAdded)
+            INSERT INTO Songs (Title, Artist, Album, FilePath, Duration, DateAdded, IsAutoDiscovered)
+            VALUES (@Title, @Artist, @Album, @FilePath, @Duration, @DateAdded, @IsAutoDiscovered)
         ";
         command.Parameters.AddWithValue("@Title", song.Title ?? string.Empty);
         command.Parameters.AddWithValue("@Artist", song.Artist ?? string.Empty);
@@ -115,6 +138,27 @@ public class DatabaseService
         command.Parameters.AddWithValue("@FilePath", song.FilePath ?? string.Empty);
         command.Parameters.AddWithValue("@Duration", song.Duration ?? string.Empty);
         command.Parameters.AddWithValue("@DateAdded", song.DateAdded ?? string.Empty);
+        command.Parameters.AddWithValue("@IsAutoDiscovered", song.IsAutoDiscovered ? 1 : 0);
+
+        command.ExecuteNonQuery();
+    }
+
+    public void UpdateSongMetadata(Song song)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+
+        var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Songs
+            SET Title = @Title, Artist = @Artist, Album = @Album, Duration = @Duration
+            WHERE Id = @Id
+        ";
+        command.Parameters.AddWithValue("@Title", song.Title ?? string.Empty);
+        command.Parameters.AddWithValue("@Artist", song.Artist ?? string.Empty);
+        command.Parameters.AddWithValue("@Album", song.Album ?? string.Empty);
+        command.Parameters.AddWithValue("@Duration", song.Duration ?? string.Empty);
+        command.Parameters.AddWithValue("@Id", song.Id);
 
         command.ExecuteNonQuery();
     }

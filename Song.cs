@@ -10,15 +10,16 @@ public class Song
     public string Duration { get; set; } = string.Empty;
     public string DateAdded { get; set; } = string.Empty;
     public bool IsFavorite { get; set; }
-    
+    public bool IsAutoDiscovered { get; set; }
+
     public override string ToString()
     {
         if (string.IsNullOrWhiteSpace(Artist) && string.IsNullOrWhiteSpace(Title))
             return FilePath;
-            
+
         if (string.IsNullOrWhiteSpace(Artist))
             return Title;
-            
+
         return $"{Artist} - {Title}";
     }
 }

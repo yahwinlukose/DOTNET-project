@@ -1,3 +1,8 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 
@@ -8,6 +13,7 @@ public partial class Form1 : Form
     private readonly DatabaseService _databaseService;
     private readonly AudioPlayerService _audioPlayerService;
     private readonly AudioMetadataService _audioMetadataService;
+    private readonly SettingsService _settingsService;
     private readonly System.Windows.Forms.Timer _playbackTimer;
     private bool _isDraggingProgress;
     private int? _currentLoadedSongId;
@@ -23,12 +29,14 @@ public partial class Form1 : Form
         InitializeComponent();
         _databaseService = new DatabaseService();
         _databaseService.InitializeDatabase();
-        
+
         _audioPlayerService = new AudioPlayerService();
         _audioPlayerService.PlaybackFinished += AudioPlayerService_PlaybackFinished;
         _audioMetadataService = new AudioMetadataService();
+        _settingsService = new SettingsService();
         this.FormClosing += Form1_FormClosing;
-        
+        this.Shown += Form1_Shown;
+
         _playbackTimer = new System.Windows.Forms.Timer();
         _playbackTimer.Interval = 100;
         _playbackTimer.Tick += PlaybackTimer_Tick;
@@ -53,7 +61,7 @@ public partial class Form1 : Form
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(Color.FromArgb(30, 30, 30));
-            
+
             using var brush = new SolidBrush(Color.FromArgb(80, 80, 80));
             using var font = new Font("Segoe UI", 48, FontStyle.Bold);
             var stringFormat = new StringFormat
@@ -81,9 +89,9 @@ public partial class Form1 : Form
     {
         var newImage = _audioMetadataService.GetArtwork(filePath);
         var oldImage = pbArtwork.Image;
-        
+
         pbArtwork.Image = newImage ?? _defaultArtwork;
-        
+
         if (oldImage != null && oldImage != _defaultArtwork)
         {
             oldImage.Dispose();
@@ -102,7 +110,7 @@ public partial class Form1 : Form
         {
             var current = _audioPlayerService.CurrentPosition;
             var total = _audioPlayerService.TotalDuration;
-            
+
             lblCurrentTime.Text = current.ToString(@"mm\:ss");
             if (total.TotalSeconds > 0)
             {
@@ -159,10 +167,10 @@ public partial class Form1 : Form
     {
         var searchText = txtSearch.Text?.Trim().ToLowerInvariant() ?? string.Empty;
         var showFavoritesOnly = cmbFilter.SelectedIndex == 1;
-        
-        var filteredSongs = _allSongs.Where(s => 
+
+        var filteredSongs = _allSongs.Where(s =>
             (!showFavoritesOnly || s.IsFavorite) &&
-            (string.IsNullOrEmpty(searchText) || 
+            (string.IsNullOrEmpty(searchText) ||
              (s.Title != null && s.Title.ToLowerInvariant().Contains(searchText)) ||
              (s.Artist != null && s.Artist.ToLowerInvariant().Contains(searchText)) ||
              (s.Album != null && s.Album.ToLowerInvariant().Contains(searchText)))
@@ -182,12 +190,12 @@ public partial class Form1 : Form
             }
         }
         lstSongs.EndUpdate();
-        
+
         if (itemToSelect != null)
         {
             lstSongs.SelectedItem = itemToSelect;
         }
-        
+
         lblSongCount.Text = $"{filteredSongs.Count} Songs";
     }
 
@@ -206,7 +214,7 @@ public partial class Form1 : Form
         ApplySearchFilter();
     }
 
-    private bool LoadSelectedSong(Song selectedSong)
+    private bool LoadSelectedSong(Song selectedSong, bool silentFail = false)
     {
         if (_currentLoadedSongId == selectedSong.Id && _audioPlayerService.IsLoaded)
         {
@@ -215,15 +223,25 @@ public partial class Form1 : Form
 
         try
         {
+            if (string.IsNullOrWhiteSpace(selectedSong.Duration) || selectedSong.Duration == "00:00")
+            {
+                var realMetadata = _audioMetadataService.ExtractMetadata(selectedSong.FilePath);
+                selectedSong.Title = realMetadata.Title;
+                selectedSong.Artist = realMetadata.Artist;
+                selectedSong.Album = realMetadata.Album;
+                selectedSong.Duration = realMetadata.Duration;
+                _databaseService.UpdateSongMetadata(selectedSong);
+            }
+
             _audioPlayerService.Load(selectedSong.FilePath);
             _currentLoadedSongId = selectedSong.Id;
 
             lblSongTitle.Text = string.IsNullOrWhiteSpace(selectedSong.Title) ? "Unknown Title" : selectedSong.Title;
-            
+
             var artistStr = string.IsNullOrWhiteSpace(selectedSong.Artist) ? "Unknown Artist" : selectedSong.Artist;
             var albumStr = string.IsNullOrWhiteSpace(selectedSong.Album) ? "Unknown Album" : selectedSong.Album;
             lblArtist.Text = $"{artistStr} • {albumStr}";
-            
+
             lblTotalTime.Text = _audioPlayerService.TotalDuration.ToString(@"mm\:ss");
             lblCurrentTime.Text = "00:00";
             tbProgress.Value = 0;
@@ -235,17 +253,25 @@ public partial class Form1 : Form
         catch (Exception ex)
         {
             _currentLoadedSongId = null;
-            MessageBox.Show($"Error loading audio file:\n{ex.Message}", "Playback Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (!silentFail)
+            {
+                MessageBox.Show($"Error loading audio file:\n{ex.Message}", "Playback Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
             return false;
         }
     }
+
+    private bool _isProgrammaticSelection = false;
 
     private void LstSongs_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (lstSongs.SelectedItem is Song selectedSong)
         {
             UpdateFavoriteButtonText(selectedSong);
-            LoadSelectedSong(selectedSong);
+            if (!_isProgrammaticSelection)
+            {
+                LoadSelectedSong(selectedSong, silentFail: false);
+            }
         }
     }
 
@@ -254,13 +280,17 @@ public partial class Form1 : Form
         if (index < 0 || index >= lstSongs.Items.Count) return;
         if (lstSongs.Items[index] is not Song song) return;
 
-        // Setting SelectedIndex updates the UI list visually.
-        // It may fire SelectedIndexChanged synchronously, but we don't rely on that side-effect.
-        lstSongs.SelectedIndex = index;
-        
-        // Explicitly load the song to guarantee it is ready before playing.
-        // If it's already loaded, this safely returns true without re-loading.
-        if (LoadSelectedSong(song))
+        try
+        {
+            _isProgrammaticSelection = true;
+            lstSongs.SelectedIndex = index;
+        }
+        finally
+        {
+            _isProgrammaticSelection = false;
+        }
+
+        if (LoadSelectedSong(song, silentFail: false))
         {
             _audioPlayerService.Stop();
             lblCurrentTime.Text = "00:00";
@@ -275,41 +305,102 @@ public partial class Form1 : Form
         if (lstSongs.Items.Count == 0 || lstSongs.SelectedItem == null) return;
 
         int currentIndex = lstSongs.SelectedIndex;
-        if (currentIndex > 0)
+        if (currentIndex == 0)
         {
-            LoadAndPlaySong(currentIndex - 1);
+            if (_audioPlayerService.IsLoaded)
+            {
+                _audioPlayerService.Seek(TimeSpan.Zero);
+                _audioPlayerService.Play();
+                btnPlayPause.Text = "⏸";
+            }
+            return;
         }
-        else
+
+        for (int i = currentIndex - 1; i >= 0; i--)
         {
-            LoadAndPlaySong(currentIndex); // Restarts current song
+            try
+            {
+                _isProgrammaticSelection = true;
+                lstSongs.SelectedIndex = i;
+            }
+            finally
+            {
+                _isProgrammaticSelection = false;
+            }
+            if (lstSongs.Items[i] is Song song && LoadSelectedSong(song, silentFail: true))
+            {
+                _audioPlayerService.Play();
+                btnPlayPause.Text = "⏸";
+                return;
+            }
         }
+
+        BtnStop_Click(null, EventArgs.Empty);
     }
 
     private void BtnNext_Click(object? sender, EventArgs e)
     {
+        PlayNextTrack();
+    }
+
+    private void PlayNextTrack()
+    {
         if (lstSongs.Items.Count == 0 || lstSongs.SelectedItem == null) return;
 
         int currentIndex = lstSongs.SelectedIndex;
-        
+
         if (_isShuffleOn && lstSongs.Items.Count > 1)
         {
-            int nextIndex;
-            do
+            var candidates = System.Linq.Enumerable.Range(0, lstSongs.Items.Count)
+                                .Where(i => i != currentIndex)
+                                .OrderBy(x => _random.Next())
+                                .ToList();
+
+            foreach (var idx in candidates)
             {
-                nextIndex = _random.Next(lstSongs.Items.Count);
-            } while (nextIndex == currentIndex);
-            
-            LoadAndPlaySong(nextIndex);
+                try
+                {
+                    _isProgrammaticSelection = true;
+                    lstSongs.SelectedIndex = idx;
+                }
+                finally
+                {
+                    _isProgrammaticSelection = false;
+                }
+                if (lstSongs.Items[idx] is Song song && LoadSelectedSong(song, silentFail: true))
+                {
+                    _audioPlayerService.Play();
+                    btnPlayPause.Text = "⏸";
+                    return;
+                }
+            }
         }
         else
         {
-            int nextIndex = currentIndex + 1;
-            if (nextIndex >= lstSongs.Items.Count)
+            for (int attempts = 0; attempts < lstSongs.Items.Count; attempts++)
             {
-                nextIndex = 0;
+                currentIndex++;
+                if (currentIndex >= lstSongs.Items.Count) currentIndex = 0;
+
+                try
+                {
+                    _isProgrammaticSelection = true;
+                    lstSongs.SelectedIndex = currentIndex;
+                }
+                finally
+                {
+                    _isProgrammaticSelection = false;
+                }
+                if (lstSongs.Items[currentIndex] is Song song && LoadSelectedSong(song, silentFail: true))
+                {
+                    _audioPlayerService.Play();
+                    btnPlayPause.Text = "⏸";
+                    return;
+                }
             }
-            LoadAndPlaySong(nextIndex);
         }
+
+        BtnStop_Click(null, EventArgs.Empty);
     }
 
     private void BtnPlayPause_Click(object? sender, EventArgs e)
@@ -364,56 +455,22 @@ public partial class Form1 : Form
             return;
         }
 
-        int currentIndex = lstSongs.SelectedIndex;
-        
         if (_repeatMode == RepeatMode.One)
         {
+            _audioPlayerService.Seek(TimeSpan.Zero);
             _audioPlayerService.Play();
             btnPlayPause.Text = "⏸";
+            return;
         }
-        else if (_isShuffleOn && lstSongs.Items.Count > 1)
-        {
-            int nextIndex;
-            do
-            {
-                nextIndex = _random.Next(lstSongs.Items.Count);
-            } while (nextIndex == currentIndex);
 
-            lstSongs.SelectedIndex = nextIndex;
-            _audioPlayerService.Play();
-            btnPlayPause.Text = "⏸";
-        }
-        else if (!_isShuffleOn)
+        int currentIndex = lstSongs.SelectedIndex;
+        if (!_isShuffleOn && currentIndex >= lstSongs.Items.Count - 1 && _repeatMode != RepeatMode.All)
         {
-            if (currentIndex < lstSongs.Items.Count - 1)
-            {
-                lstSongs.SelectedIndex = currentIndex + 1;
-                _audioPlayerService.Play();
-                btnPlayPause.Text = "⏸";
-            }
-            else if (_repeatMode == RepeatMode.All)
-            {
-                lstSongs.SelectedIndex = 0;
-                _audioPlayerService.Play();
-                btnPlayPause.Text = "⏸";
-            }
-            else
-            {
-                BtnStop_Click(null, EventArgs.Empty);
-            }
+            BtnStop_Click(null, EventArgs.Empty);
+            return;
         }
-        else
-        {
-            if (_repeatMode == RepeatMode.All)
-            {
-                _audioPlayerService.Play();
-                btnPlayPause.Text = "⏸";
-            }
-            else
-            {
-                BtnStop_Click(null, EventArgs.Empty);
-            }
-        }
+
+        PlayNextTrack();
     }
 
     private void BtnRepeat_Click(object? sender, EventArgs e)
@@ -427,8 +484,8 @@ public partial class Form1 : Form
         };
 
         btnRepeat.Text = _repeatMode == RepeatMode.One ? "🔂" : "🔁";
-        btnRepeat.BackColor = _repeatMode == RepeatMode.Off 
-            ? System.Drawing.Color.FromArgb(45, 45, 45) 
+        btnRepeat.BackColor = _repeatMode == RepeatMode.Off
+            ? System.Drawing.Color.FromArgb(45, 45, 45)
             : System.Drawing.Color.SteelBlue;
     }
 
@@ -469,7 +526,7 @@ public partial class Form1 : Form
                     System.Diagnostics.Debug.WriteLine($"Error adding file {filePath}: {ex.Message}");
                 }
             }
-            
+
             LoadSongs();
         }
     }
@@ -536,6 +593,255 @@ public partial class Form1 : Form
         catch (Exception ex)
         {
             MessageBox.Show($"Error updating favorite:\n{ex.Message}", "Database Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void Form1_Shown(object? sender, EventArgs e)
+    {
+        CleanPollutedDatabase();
+        CheckFirstRunAndScan();
+    }
+
+    private bool IsKnownBadOldEntry(string filePath)
+    {
+        string fileName = Path.GetFileNameWithoutExtension(filePath).ToLowerInvariant();
+        if (fileName.StartsWith("ptt-") && fileName.Contains("-wa")) return true;
+        if (fileName == "invalid_keypress" || fileName == "silence") return true;
+        if (System.Text.RegularExpressions.Regex.IsMatch(fileName, @"test-\d{4,5}hz")) return true;
+        if (System.Text.RegularExpressions.Regex.IsMatch(fileName, @"\d+hz-\d+ch")) return true;
+        if (fileName.Contains("test-") || fileName.Contains("-test") || fileName.StartsWith("test_") || fileName.EndsWith("_test"))
+        {
+            if (fileName.Contains("hz") || fileName.Contains("bit") || fileName.Contains("ch-") || fileName.Contains("float") || fileName.Contains("le") || fileName.Contains("bytes") || fileName.Contains("s-"))
+                return true;
+        }
+        if (fileName.Contains("24bit") || fileName.Contains("32bit") || fileName.Contains("16bit"))
+        {
+            if (fileName.Contains("float") || fileName.Contains("le") || fileName.Contains("be") || fileName.Contains("test"))
+                return true;
+        }
+        return false;
+    }
+
+    private void CleanPollutedDatabase()
+    {
+        var songs = _databaseService.GetSongs();
+        bool changed = false;
+
+        foreach (var song in songs)
+        {
+            if (song.IsFavorite) continue; // Do not delete favorites
+
+            if (song.IsAutoDiscovered)
+            {
+                // New logic: delete if it fails relevance
+                if (IsKnownBadOldEntry(song.FilePath))
+                {
+                    _databaseService.DeleteSong(song.Id);
+                    changed = true;
+                }
+            }
+            else
+            {
+                // Old logic: only delete explicit proven bad legacy entries
+                if (IsKnownBadOldEntry(song.FilePath))
+                {
+                    _databaseService.DeleteSong(song.Id);
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+        {
+            LoadSongs();
+        }
+    }
+
+    private async void CheckFirstRunAndScan()
+    {
+        var settings = _settingsService.LoadSettings();
+
+        if (settings.ScanChoice == ScanComputerChoice.NotSet)
+        {
+            var result = ShowFirstRunPrompt();
+            settings.ScanChoice = result;
+            _settingsService.SaveSettings(settings);
+        }
+
+        if (settings.ScanChoice == ScanComputerChoice.Scan)
+        {
+            await RunBackgroundScanAsync();
+        }
+    }
+
+    private ScanComputerChoice ShowFirstRunPrompt()
+    {
+        using var prompt = new Form()
+        {
+            Width = 400,
+            Height = 200,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            Text = "Find music automatically?",
+            StartPosition = FormStartPosition.CenterParent,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            BackColor = Color.FromArgb(40, 40, 40),
+            ForeColor = Color.White
+        };
+
+        var lblMsg = new Label()
+        {
+            Left = 20,
+            Top = 20,
+            Width = 340,
+            Height = 60,
+            Text = "Music Player can scan your computer for supported audio files. This may take some time on large drives.",
+            Font = new Font("Segoe UI", 10)
+        };
+
+        var btnScan = new Button()
+        {
+            Text = "Scan Computer",
+            Left = 50,
+            Width = 120,
+            Top = 100,
+            DialogResult = DialogResult.Yes,
+            BackColor = Color.SteelBlue,
+            FlatStyle = FlatStyle.Flat,
+            ForeColor = Color.White
+        };
+        btnScan.FlatAppearance.BorderSize = 0;
+
+        var btnNotNow = new Button()
+        {
+            Text = "Not Now",
+            Left = 200,
+            Width = 120,
+            Top = 100,
+            DialogResult = DialogResult.No,
+            BackColor = Color.FromArgb(60, 60, 60),
+            FlatStyle = FlatStyle.Flat,
+            ForeColor = Color.White
+        };
+        btnNotNow.FlatAppearance.BorderSize = 0;
+
+        prompt.Controls.Add(lblMsg);
+        prompt.Controls.Add(btnScan);
+        prompt.Controls.Add(btnNotNow);
+        prompt.AcceptButton = btnScan;
+        prompt.CancelButton = btnNotNow;
+
+        return prompt.ShowDialog(this) == DialogResult.Yes
+            ? ScanComputerChoice.Scan
+            : ScanComputerChoice.NotNow;
+    }
+
+    private async Task RunBackgroundScanAsync()
+    {
+        lblSongCount.Text = "Scanning...";
+        int foundCount = 0;
+
+        await Task.Run(() =>
+        {
+            var drives = DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed);
+            var excludedFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+            };
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            foreach (var drive in drives)
+            {
+                if (!drive.IsReady) continue;
+
+                string root = drive.RootDirectory.FullName;
+                excludedFolders.Add(Path.Combine(root, "$Recycle.Bin"));
+                excludedFolders.Add(Path.Combine(root, "System Volume Information"));
+
+                ScanDirectoryRecursive(root, excludedFolders, ref foundCount, stopwatch);
+            }
+        });
+
+        LoadSongs();
+    }
+
+    private static readonly HashSet<string> SmartDirectoryExclusions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "node_modules", "bin", "obj", "packages", "test", "tests", "testing", "sample", "samples", "fixtures", "benchmark", "benchmarks", ".venv", "__pycache__"
+    };
+
+    private void ScanDirectoryRecursive(string path, HashSet<string> excludedFolders, ref int foundCount, System.Diagnostics.Stopwatch stopwatch)
+    {
+        try
+        {
+            if (excludedFolders.Contains(path)) return;
+
+            string dirName = Path.GetFileName(path);
+            if (dirName.StartsWith(".")) return;
+            if (SmartDirectoryExclusions.Contains(dirName)) return;
+
+            var files = Directory.GetFiles(path);
+            var supportedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp3", ".wav", ".wma", ".aac", ".m4a" };
+
+            foreach (var file in files)
+            {
+                if (supportedExtensions.Contains(Path.GetExtension(file)))
+                {
+                    if (!_databaseService.SongExists(file))
+                    {
+                        try
+                        {
+                            if (!IsKnownBadOldEntry(file))
+                            {
+                                var song = new Song
+                                {
+                                    FilePath = file,
+                                    Title = Path.GetFileNameWithoutExtension(file),
+                                    Artist = "Unknown Artist",
+                                    Album = "Unknown Album",
+                                    DateAdded = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                                    IsAutoDiscovered = true
+                                };
+
+                                _databaseService.AddSong(song);
+                                foundCount++;
+
+                                if (stopwatch.ElapsedMilliseconds > 500)
+                                {
+                                    int currentCount = foundCount;
+                                    this.Invoke((Action)(() => lblSongCount.Text = $"Scanning... Music files found: {currentCount}"));
+                                    stopwatch.Restart();
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore bad files
+                        }
+                    }
+                }
+            }
+
+            var directories = Directory.GetDirectories(path);
+            foreach (var directory in directories)
+            {
+                ScanDirectoryRecursive(directory, excludedFolders, ref foundCount, stopwatch);
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Skip folders we don't have access to
+        }
+        catch (Exception ex)
+        {
+            // Ignore other file system errors to let scan continue
+            System.Diagnostics.Debug.WriteLine($"Error scanning {path}: {ex.Message}");
         }
     }
 }
