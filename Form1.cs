@@ -724,6 +724,99 @@ public partial class Form1 : Form
         }
     }
 
+    private async void BtnScanFolder_Click(object? sender, EventArgs e)
+    {
+        using var folderBrowserDialog = new FolderBrowserDialog();
+        folderBrowserDialog.Description = "Select a folder to scan for music files";
+        folderBrowserDialog.UseDescriptionForTitle = true;
+
+        if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
+        {
+            string selectedPath = folderBrowserDialog.SelectedPath;
+            int newFilesCount = 0;
+
+            // Disable scan button to prevent concurrent scans
+            btnScanFolder.Enabled = false;
+
+            try
+            {
+                await System.Threading.Tasks.Task.Run(() =>
+                {
+                    ScanDirectoryRecursive(selectedPath, ref newFilesCount);
+                });
+
+                LoadSongs();
+                if (newFilesCount > 0)
+                {
+                    MessageBox.Show($"Scan complete. {newFilesCount} new music files added.", "Scan Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show("Scan complete. No new music files found.", "Scan Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"An error occurred during scan: {ex.Message}", "Scan Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnScanFolder.Enabled = true;
+                // Re-update the song count based on loaded songs
+                lblSongCount.Text = $"{lstSongs.Items.Count} Songs";
+            }
+        }
+    }
+
+    private void ScanDirectoryRecursive(string path, ref int newFilesCount)
+    {
+        try
+        {
+            // Process files in the current directory
+            var files = System.IO.Directory.GetFiles(path);
+            var validExtensions = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase) { ".mp3", ".wav", ".wma", ".aac", ".m4a" };
+            
+            foreach (var file in files)
+            {
+                if (validExtensions.Contains(System.IO.Path.GetExtension(file)))
+                {
+                    if (!_databaseService.SongExists(file))
+                    {
+                        var song = _audioMetadataService.ExtractMetadata(file);
+                        _databaseService.AddSong(song);
+                        newFilesCount++;
+
+                        // Update UI safely
+                        int currentCount = newFilesCount;
+                        if (this.IsHandleCreated)
+                        {
+                            this.Invoke(new Action(() =>
+                            {
+                                lblSongCount.Text = $"Scanning... Music files found: {currentCount}";
+                            }));
+                        }
+                    }
+                }
+            }
+
+            // Recurse into subdirectories
+            var directories = System.IO.Directory.GetDirectories(path);
+            foreach (var dir in directories)
+            {
+                ScanDirectoryRecursive(dir, ref newFilesCount);
+            }
+        }
+        catch (System.UnauthorizedAccessException)
+        {
+            // Skip inaccessible directories/files
+            System.Diagnostics.Debug.WriteLine($"Access denied to: {path}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error scanning {path}: {ex.Message}");
+        }
+    }
+
     // Event handler for the Delete Music button click
     private void BtnDeleteMusic_Click(object? sender, EventArgs e)
     {

@@ -33,6 +33,7 @@ partial class Form1
         this.btnAddMusic = new System.Windows.Forms.Button();
         this.btnDeleteMusic = new System.Windows.Forms.Button();
         this.btnFavorite = new System.Windows.Forms.Button();
+        this.btnScanFolder = new System.Windows.Forms.Button();
         this.lblSearch = new System.Windows.Forms.Label();
         this.txtSearch = new System.Windows.Forms.TextBox();
         this.btnClearSearch = new System.Windows.Forms.Button();
@@ -116,6 +117,21 @@ partial class Form1
         this.btnFavorite.Text = "⭐ Favorite";
         this.btnFavorite.UseVisualStyleBackColor = false;
         this.btnFavorite.Click += new System.EventHandler(this.BtnFavorite_Click);
+        // 
+        // btnScanFolder
+        // 
+        this.btnScanFolder.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
+        this.btnScanFolder.FlatAppearance.BorderSize = 0;
+        this.btnScanFolder.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+        this.btnScanFolder.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
+        this.btnScanFolder.ForeColor = System.Drawing.Color.White;
+        this.btnScanFolder.Location = new System.Drawing.Point(275, 15);
+        this.btnScanFolder.Name = "btnScanFolder";
+        this.btnScanFolder.Size = new System.Drawing.Size(100, 30);
+        this.btnScanFolder.TabIndex = 22;
+        this.btnScanFolder.Text = "Scan Folder";
+        this.btnScanFolder.UseVisualStyleBackColor = false;
+        this.btnScanFolder.Click += new System.EventHandler(this.BtnScanFolder_Click);
         // 
         // lblSearch
         // 
@@ -418,6 +434,7 @@ partial class Form1
         this.Controls.Add(this.btnAddMusic);
         this.Controls.Add(this.btnDeleteMusic);
         this.Controls.Add(this.btnFavorite);
+        this.Controls.Add(this.btnScanFolder);
         this.Controls.Add(this.lstSongs);
         this.Name = "Form1";
         this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
@@ -437,6 +454,7 @@ partial class Form1
     private System.Windows.Forms.Button btnAddMusic;
     private System.Windows.Forms.Button btnDeleteMusic;
     private System.Windows.Forms.Button btnFavorite;
+    private System.Windows.Forms.Button btnScanFolder;
     private System.Windows.Forms.ComboBox cmbFilter;
     private System.Windows.Forms.Label lblSearch;
     private System.Windows.Forms.TextBox txtSearch;
