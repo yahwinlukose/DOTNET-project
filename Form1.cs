@@ -13,9 +13,8 @@ public partial class Form1 : Form
     private readonly DatabaseService _databaseService;
     // A private readonly field for the audio player service instance
     private readonly AudioPlayerService _audioPlayerService;
-    // A private readonly field for the audio metadata service instance
     private readonly AudioMetadataService _audioMetadataService;
-    // A private readonly field for the timer used to update playback progress
+    private readonly SettingsService _settingsService;
     private readonly System.Windows.Forms.Timer _playbackTimer;
     // A private flag indicating if the user is currently dragging the progress bar
     private bool _isDraggingProgress;
@@ -50,6 +49,8 @@ public partial class Form1 : Form
         _audioPlayerService.PlaybackFinished += AudioPlayerService_PlaybackFinished;
         // Instantiate the audio metadata service
         _audioMetadataService = new AudioMetadataService();
+        _settingsService = new SettingsService();
+        _settingsService.LoadSettings();
         // Subscribe to the FormClosing event of the form to handle cleanup
         this.FormClosing += Form1_FormClosing;
         
@@ -62,12 +63,12 @@ public partial class Form1 : Form
         // Start the playback timer
         _playbackTimer.Start();
 
-        // Set the initial value of the volume trackbar to 100
-        tbVolume.Value = 100;
+        // Set the initial value of the volume trackbar from settings
+        tbVolume.Value = _settingsService.DefaultVolume;
         // Update the volume label text to reflect the initial value
-        lblVolume.Text = "Volume: 100%";
-        // Set the initial volume of the audio player service to maximum (1.0)
-        _audioPlayerService.Volume = 1.0f;
+        lblVolume.Text = $"Volume: {_settingsService.DefaultVolume}%";
+        // Set the initial volume of the audio player service
+        _audioPlayerService.Volume = _settingsService.DefaultVolume / 100f;
 
         // Add the "All Songs" option to the filter combo box
         cmbFilter.Items.Add("All Songs");
@@ -817,6 +818,23 @@ public partial class Form1 : Form
         }
     }
 
+    private void BtnSettings_Click(object? sender, EventArgs e)
+    {
+        using var settingsForm = new SettingsForm(_settingsService);
+        if (settingsForm.ShowDialog(this) == DialogResult.OK)
+        {
+            tbVolume.Value = _settingsService.DefaultVolume;
+            lblVolume.Text = $"Volume: {_settingsService.DefaultVolume}%";
+            _audioPlayerService.Volume = _settingsService.DefaultVolume / 100f;
+        }
+    }
+
+    private void BtnAbout_Click(object? sender, EventArgs e)
+    {
+        using var aboutForm = new AboutForm();
+        aboutForm.ShowDialog(this);
+    }
+
     // Event handler for the Delete Music button click
     private void BtnDeleteMusic_Click(object? sender, EventArgs e)
     {
@@ -829,13 +847,16 @@ public partial class Form1 : Form
             return;
         }
 
-        // Ask the user to confirm the deletion action
-        var result = MessageBox.Show($"Are you sure you want to remove '{selectedSong.Title}' from your library?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-        // Check if the user confirmed by clicking Yes
-        if (result == DialogResult.Yes)
+        if (_settingsService.ConfirmBeforeDeletingSongs)
         {
-            // Start a try block for the deletion process
-            try
+            // Ask the user to confirm the deletion action
+            var result = MessageBox.Show($"Are you sure you want to remove '{selectedSong.Title}' from your library?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            // Check if the user confirmed by clicking Yes
+            if (result != DialogResult.Yes) return;
+        }
+        
+        // Start a try block for the deletion process
+        try
             {
                 // If the song being deleted is the one currently loaded/playing
                 if (selectedSong.Id == _currentLoadedSongId)
@@ -876,7 +897,6 @@ public partial class Form1 : Form
                 // Show an error message box with exception details
                 MessageBox.Show($"Error deleting song:\n{ex.Message}", "Delete Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-        }
     }
 
     // A private method to update the text of the favorite button based on song state
